@@ -1,0 +1,6 @@
+{
+  "name": "Expense Tracker",
+  "description": "Track expenses with Google Sheets as a database and visualize monthly spending trends with interactive charts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
