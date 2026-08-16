@@ -29,7 +29,7 @@ import {
 interface ExpenseTableProps {
   expenses: Expense[];
   onEditExpense: (expense: Expense) => void;
-  onDeleteExpense: (rowIndex: number) => void;
+  onDeleteExpense: (rowIndex?: number, id?: string) => Promise<void> | void;
   onBatchDeleteExpenses?: (rowIndices: number[]) => Promise<void>;
   onBatchUpdateCategory?: (rowIndices: number[], category: string) => Promise<void>;
   sheetWebViewLink?: string;
@@ -54,8 +54,13 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
   // Multi-Selection state
   const [selectedRowIndices, setSelectedRowIndices] = useState<number[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState<boolean>(false);
-  const [bulkCategorySelect, setBulkCategorySelect] = useState<string>('Groceries');
+  const [bulkCategorySelect, setBulkCategorySelect] = useState<string>('Total Spend');
   const [bulkCustomCategory, setBulkCustomCategory] = useState<string>('');
+
+  // Delete confirmation modals state (Replaces blocking window.confirm for iframe reliability)
+  const [itemToDelete, setItemToDelete] = useState<Expense | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState<boolean>(false);
+  const [isDeletingItem, setIsDeletingItem] = useState<boolean>(false);
 
   // Counts & Totals for Tab Badges
   const typeStats = useMemo(() => {
@@ -175,20 +180,35 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
   };
 
   // Bulk execution handlers
-  const handleExecuteBulkDelete = async () => {
+  const handleExecuteBulkDelete = () => {
     if (selectedRowIndices.length === 0 || !onBatchDeleteExpenses) return;
-    if (!confirm(`Are you sure you want to delete ${selectedRowIndices.length} selected expense row(s) from your Google Sheet?`)) {
-      return;
-    }
+    setShowBulkDeleteConfirm(true);
+  };
 
+  const confirmAndPerformBulkDelete = async () => {
+    if (!onBatchDeleteExpenses || selectedRowIndices.length === 0) return;
     setIsBatchProcessing(true);
     try {
       await onBatchDeleteExpenses(selectedRowIndices);
       setSelectedRowIndices([]);
+      setShowBulkDeleteConfirm(false);
     } catch (err) {
       console.error(err);
     } finally {
       setIsBatchProcessing(false);
+    }
+  };
+
+  const confirmAndPerformSingleDelete = async () => {
+    if (!itemToDelete) return;
+    setIsDeletingItem(true);
+    try {
+      await onDeleteExpense(itemToDelete.rowIndex, itemToDelete.id);
+      setItemToDelete(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsDeletingItem(false);
     }
   };
 
@@ -199,7 +219,6 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
       bulkCategorySelect === 'Custom / Other...' ? bulkCustomCategory.trim() : bulkCategorySelect;
 
     if (!targetCategory) {
-      alert('Please select or enter a custom category.');
       return;
     }
 
@@ -602,18 +621,14 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                         <button
                           onClick={() => onEditExpense(exp)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 transition-colors cursor-pointer"
-                          title="Edit expense row"
+                          title="Edit transaction"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (exp.rowIndex && confirm(`Delete "${exp.category}" (${isInc ? '+' : '-'}₹${Math.abs(exp.amount)}) from Google Sheet?`)) {
-                              onDeleteExpense(exp.rowIndex);
-                            }
-                          }}
+                          onClick={() => setItemToDelete(exp)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 transition-colors cursor-pointer"
-                          title="Delete expense row"
+                          title="Delete transaction"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -671,6 +686,105 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                 title="Next page"
               >
                 <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Item Delete Confirmation Modal */}
+      {itemToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1 flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-100">Delete Transaction?</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Are you sure you want to permanently remove this transaction from your records?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between text-xs">
+              <div className="space-y-1">
+                <div className="font-semibold text-slate-200 flex items-center gap-2">
+                  <span
+                    className="w-2 h-2 rounded-full inline-block"
+                    style={{ backgroundColor: CATEGORY_COLORS[itemToDelete.category] || '#64748b' }}
+                  />
+                  <span>{itemToDelete.category}</span>
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {itemToDelete.date} • {itemToDelete.paymentMethod || 'Other'}
+                  {itemToDelete.notes ? ` • "${itemToDelete.notes}"` : ''}
+                </div>
+              </div>
+              <div className={`text-sm font-extrabold whitespace-nowrap ${
+                isIncomeTransaction(itemToDelete) ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                {isIncomeTransaction(itemToDelete) ? `+ ${formatCurrency(Math.abs(itemToDelete.amount))}` : `- ${formatCurrency(Math.abs(itemToDelete.amount))}`}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setItemToDelete(null)}
+                disabled={isDeletingItem}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmAndPerformSingleDelete}
+                disabled={isDeletingItem}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingItem ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>{isDeletingItem ? 'Deleting...' : 'Confirm Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <h3 className="text-base font-bold text-slate-100">Delete {selectedRowIndices.length} Transactions?</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  This will permanently delete the {selectedRowIndices.length} selected transaction row(s) from your Google Sheet database.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={isBatchProcessing}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmAndPerformBulkDelete}
+                disabled={isBatchProcessing}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isBatchProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>{isBatchProcessing ? 'Deleting...' : `Delete ${selectedRowIndices.length} Rows`}</span>
               </button>
             </div>
           </div>

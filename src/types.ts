@@ -12,28 +12,26 @@ export interface Expense {
 }
 
 export type ExpenseCategory =
+  | 'Total Spend'
+  | 'Total Cash'
+  | 'Total UPI'
   | 'Housing & Rent'
-  | 'Groceries'
-  | 'Dining & Drinks'
   | 'Transportation'
   | 'Utilities & Bills'
   | 'Entertainment'
   | 'Shopping'
-  | 'Health & Fitness'
-  | 'Travel'
   | 'Miscellaneous'
   | string;
 
 export const EXPENSE_CATEGORIES: string[] = [
+  'Total Spend',
+  'Total Cash',
+  'Total UPI',
   'Housing & Rent',
-  'Groceries',
-  'Dining & Drinks',
   'Transportation',
   'Utilities & Bills',
   'Entertainment',
   'Shopping',
-  'Health & Fitness',
-  'Travel',
   'Miscellaneous',
   'Custom / Other...',
 ];

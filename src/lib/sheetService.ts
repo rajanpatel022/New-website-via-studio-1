@@ -174,18 +174,49 @@ export function setStoredSheetMeta(meta: SheetMeta): void {
 }
 
 /**
- * Sends a POST request to Google Apps Script Web App
+ * Sends a request to Google Apps Script Web App (routes via backend proxy with direct browser fallback)
  */
-async function postToAppsScript(url: string, payload: Record<string, any>): Promise<any> {
+async function callAppsScript(url: string, payload?: Record<string, any>): Promise<any> {
   const cleanUrl = url.trim();
-  const res = await fetch(cleanUrl, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8', // Prevents CORS preflight issues with Apps Script
-    },
-  });
 
+  // Try proxy first to prevent browser CORS and iframe 302 redirect failures
+  try {
+    const proxyRes = await fetch('/api/sheet/proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: cleanUrl,
+        payload,
+      }),
+    });
+
+    if (proxyRes.ok) {
+      const data = await proxyRes.json();
+      if (data && data.status !== 'error') {
+        return data;
+      }
+      if (data && data.error) {
+        throw new Error(data.message || data.error);
+      }
+    }
+  } catch (proxyError) {
+    console.warn('Proxy route error, attempting direct fetch:', proxyError);
+  }
+
+  // Fallback to direct client fetch
+  const fetchOptions: RequestInit = {
+    method: payload !== undefined ? 'POST' : 'GET',
+    redirect: 'follow',
+    headers: {
+      'Accept': 'application/json',
+      ...(payload !== undefined ? { 'Content-Type': 'text/plain;charset=utf-8' } : {}),
+    },
+    ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+  };
+
+  const res = await fetch(cleanUrl, fetchOptions);
   if (!res.ok) {
     throw new Error(`Google Apps Script returned status ${res.status}`);
   }
@@ -198,11 +229,18 @@ async function postToAppsScript(url: string, payload: Record<string, any>): Prom
 }
 
 /**
+ * Sends a POST request to Google Apps Script Web App
+ */
+async function postToAppsScript(url: string, payload: Record<string, any>): Promise<any> {
+  return await callAppsScript(url, payload);
+}
+
+/**
  * Test connectivity to the Google Apps Script Web App
  */
 export async function testSheetConnection(url: string): Promise<{ success: boolean; title?: string; error?: string }> {
   try {
-    const data = await postToAppsScript(url, { action: 'ping' });
+    const data = await callAppsScript(url, { action: 'ping' });
     if (data.status === 'success') {
       const meta: SheetMeta = {
         title: data.spreadsheetTitle || 'Google Sheet Database',
@@ -216,18 +254,15 @@ export async function testSheetConnection(url: string): Promise<{ success: boole
   } catch (err: any) {
     // If POST ping fails, try GET fallback
     try {
-      const getRes = await fetch(url.trim());
-      if (getRes.ok) {
-        const getData = await getRes.json();
-        if (getData.status === 'success') {
-          const meta: SheetMeta = {
-            title: getData.spreadsheetTitle || 'Google Sheet Database',
-            id: getData.spreadsheetId,
-            connectedAt: new Date().toISOString(),
-          };
-          setStoredSheetMeta(meta);
-          return { success: true, title: meta.title };
-        }
+      const getData = await callAppsScript(url);
+      if (getData.status === 'success') {
+        const meta: SheetMeta = {
+          title: getData.spreadsheetTitle || 'Google Sheet Database',
+          id: getData.spreadsheetId,
+          connectedAt: new Date().toISOString(),
+        };
+        setStoredSheetMeta(meta);
+        return { success: true, title: meta.title };
       }
     } catch (e) {}
     return { success: false, error: err.message || 'Failed to connect to Google Apps Script' };
@@ -238,13 +273,7 @@ export async function testSheetConnection(url: string): Promise<{ success: boole
  * Fetch all expenses from Google Sheet
  */
 export async function fetchExpensesFromSheet(url: string): Promise<{ expenses: Expense[]; sheetTitle?: string }> {
-  const cleanUrl = url.trim();
-  const res = await fetch(cleanUrl);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch from sheet: HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
+  const data = await callAppsScript(url);
   if (data.status === 'error') {
     throw new Error(data.message || 'Error loading expenses from Google Sheet');
   }

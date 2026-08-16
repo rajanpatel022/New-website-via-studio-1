@@ -623,7 +623,7 @@ app.post('/api/ai/parse-expense', async (req, res) => {
 Respond ONLY with valid JSON in this exact structure, with no markdown code blocks:
 {
   "amount": number (e.g. 45.50),
-  "category": string (Standard category like "Groceries", "Dining & Drinks", "Transportation", "Utilities & Bills", "Entertainment", "Shopping", "Health & Fitness", "Travel", "Housing & Rent", "Miscellaneous", or a specific custom category name if none fit),
+  "category": string (Standard category like "Total Spend", "Total Cash", "Total UPI", "Housing & Rent", "Transportation", "Utilities & Bills", "Entertainment", "Shopping", "Miscellaneous", or a specific custom category name if none fit),
   "description": string (short clean name/vendor, e.g. "Swiggy", "Blinkit", "Big Bazaar"),
   "date": string (YYYY-MM-DD format, default to today's date ${new Date().toISOString().split('T')[0]} if unspecified),
   "paymentMethod": string (Must be one of: "UPI", "Credit Card", "Debit Card", "Cash", "Bank Transfer", "Digital Wallet", "Other"),
@@ -639,6 +639,46 @@ Respond ONLY with valid JSON in this exact structure, with no markdown code bloc
   } catch (err: any) {
     console.error('Error parsing expense with Gemini AI:', err);
     res.status(500).json({ error: err.message || 'Failed to parse expense with AI' });
+  }
+});
+
+// Proxy for Google Apps Script Web App requests (solves browser CORS & 302 redirect blocking in iframes)
+app.post('/api/sheet/proxy', async (req, res) => {
+  try {
+    const { url, payload } = req.body;
+    if (!url) {
+      return res.status(400).json({ status: 'error', message: 'Script URL is required' });
+    }
+
+    const scriptUrl = String(url).trim();
+    const fetchOptions: RequestInit = {
+      method: payload !== undefined ? 'POST' : 'GET',
+      redirect: 'follow',
+      headers: {
+        'Accept': 'application/json',
+        ...(payload !== undefined ? { 'Content-Type': 'text/plain;charset=utf-8' } : {})
+      },
+      ...(payload !== undefined ? { body: typeof payload === 'string' ? payload : JSON.stringify(payload) } : {})
+    };
+
+    const response = await fetch(scriptUrl, fetchOptions);
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      const json = await response.json();
+      return res.json(json);
+    } else {
+      const text = await response.text();
+      try {
+        const parsed = JSON.parse(text);
+        return res.json(parsed);
+      } catch {
+        return res.json({ status: 'success', raw: text });
+      }
+    }
+  } catch (error: any) {
+    console.error('Apps Script proxy error:', error);
+    res.status(500).json({ status: 'error', message: error.message || 'Failed to communicate with Google Apps Script' });
   }
 });
 

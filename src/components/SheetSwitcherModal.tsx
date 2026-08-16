@@ -45,6 +45,9 @@ export const SheetSwitcherModal: React.FC<SheetSwitcherModalProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // In-app delete confirmation state (avoids blocked window.confirm in iframes)
+  const [sheetToDelete, setSheetToDelete] = useState<SavedSheet | null>(null);
+
   const loadData = () => {
     const list = getSavedSheets();
     setSheets(list);
@@ -57,6 +60,7 @@ export const SheetSwitcherModal: React.FC<SheetSwitcherModalProps> = ({
       setIsAdding(false);
       setEditingId(null);
       setFormError(null);
+      setSheetToDelete(null);
     }
   }, [isOpen]);
 
@@ -86,19 +90,23 @@ export const SheetSwitcherModal: React.FC<SheetSwitcherModalProps> = ({
     setFormError(null);
   };
 
-  const handleDelete = (sheet: SavedSheet, e: React.MouseEvent) => {
+  const handlePromptDelete = (sheet: SavedSheet, e: React.MouseEvent) => {
     e.stopPropagation();
     if (sheets.length <= 1) {
-      alert('You must keep at least one sheet configured.');
+      setFormError('You must keep at least one sheet configured.');
       return;
     }
-    if (confirm(`Remove "${sheet.name}" from your saved sheets?`)) {
-      const remainingActive = deleteSavedSheet(sheet.id);
-      loadData();
-      if (activeSheet?.id === sheet.id) {
-        onSheetChanged(remainingActive);
-      }
+    setSheetToDelete(sheet);
+  };
+
+  const confirmDeleteSheet = () => {
+    if (!sheetToDelete) return;
+    const remainingActive = deleteSavedSheet(sheetToDelete.id);
+    loadData();
+    if (activeSheet?.id === sheetToDelete.id) {
+      onSheetChanged(remainingActive);
     }
+    setSheetToDelete(null);
   };
 
   const handleSaveSheet = async (e: React.FormEvent) => {
@@ -330,8 +338,9 @@ export const SheetSwitcherModal: React.FC<SheetSwitcherModalProps> = ({
 
                     {sheets.length > 1 && (
                       <button
-                        onClick={(e) => handleDelete(sheet, e)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        type="button"
+                        onClick={(e) => handlePromptDelete(sheet, e)}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                         title="Delete this sheet profile"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -340,8 +349,9 @@ export const SheetSwitcherModal: React.FC<SheetSwitcherModalProps> = ({
 
                     {!isActive && (
                       <button
+                        type="button"
                         onClick={() => handleSelectSheet(sheet)}
-                        className="ml-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center gap-1"
+                        className="ml-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
                       >
                         <span>Switch</span>
                         <ArrowRight className="w-3 h-3" />
@@ -353,6 +363,43 @@ export const SheetSwitcherModal: React.FC<SheetSwitcherModalProps> = ({
             })}
           </div>
         </div>
+
+        {/* In-app Sheet Delete Confirmation Modal */}
+        {sheetToDelete && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div className="space-y-1 flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-slate-100">Remove Sheet Profile?</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Remove <span className="font-semibold text-slate-200">"{sheetToDelete.name}"</span> from your saved profiles list? Your data in Google Sheets remains safe.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSheetToDelete(null)}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteSheet}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove Sheet</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between text-xs text-slate-400">

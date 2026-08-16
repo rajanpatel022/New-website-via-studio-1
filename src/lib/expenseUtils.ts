@@ -2,25 +2,24 @@ import { Expense, SpendingSummary, MonthlyTrendData, CategoryTrendData, INCOME_C
 
 export const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   // Expenses
+  'Total Spend': '#ef4444', // Red / Rose
+  'Total Cash': '#f59e0b', // Amber / Gold
+  'Total UPI': '#06b6d4', // Cyan / Teal
   'Housing & Rent': '#6366f1', // Indigo
-  'Groceries': '#10b981', // Emerald
-  'Dining & Drinks': '#f59e0b', // Amber
   'Transportation': '#3b82f6', // Blue
-  'Utilities & Bills': '#06b6d4', // Cyan
+  'Utilities & Bills': '#0284c7', // Sky
   'Entertainment': '#ec4899', // Pink
   'Shopping': '#8b5cf6', // Purple
-  'Health & Fitness': '#14b8a6', // Teal
-  'Travel': '#f97316', // Orange
   'Miscellaneous': '#64748b', // Slate
   // Income
   'Salary': '#10b981', // Emerald
-  'Freelance & Consulting': '#06b6d4', // Cyan
+  'Freelance & Consulting': '#14b8a6', // Teal
   'Investments & Returns': '#3b82f6', // Blue
   'Business Revenue': '#8b5cf6', // Purple
   'Rental Income': '#f59e0b', // Amber
   'Gifts & Allowance': '#ec4899', // Pink
-  'Refunds & Cashback': '#14b8a6', // Teal
-  'Side Hustle': '#84cc16', // Lime
+  'Refunds & Cashback': '#84cc16', // Lime
+  'Side Hustle': '#10b981', // Emerald
   'Miscellaneous Income': '#059669', // Dark Emerald
 };
 

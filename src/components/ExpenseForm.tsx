@@ -39,17 +39,18 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
   // Form State
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [amount, setAmount] = useState<string>('');
-  const [category, setCategory] = useState<string>('Groceries');
+  const [category, setCategory] = useState<string>('Total Spend');
   const [customCategory, setCustomCategory] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('Other');
   const [notes, setNotes] = useState<string>('');
 
   // Category Color State
   const [showColorPicker, setShowColorPicker] = useState<boolean>(false);
-  const [categoryColor, setCategoryColor] = useState<string>('#10b981');
+  const [categoryColor, setCategoryColor] = useState<string>('#ef4444');
 
   // Saving State
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Active targeted category name
   const effectiveCategoryName =
@@ -73,7 +74,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
       setAmount(editingExpense.amount ? String(Math.abs(editingExpense.amount)) : '');
 
       const catList = initialType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-      const cat = editingExpense.category || (initialType === 'income' ? 'Salary' : 'Groceries');
+      const cat = editingExpense.category || (initialType === 'income' ? 'Salary' : 'Total Spend');
       const isStd = catList.includes(cat) && cat !== 'Custom / Other...';
       if (isStd) {
         setCategory(cat);
@@ -98,8 +99,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
       setCategory('Salary');
       setCategoryColor(getCategoryColor('Salary'));
     } else {
-      setCategory('Groceries');
-      setCategoryColor(getCategoryColor('Groceries'));
+      setCategory('Total Spend');
+      setCategoryColor(getCategoryColor('Total Spend'));
     }
     setCustomCategory('');
   };
@@ -115,12 +116,13 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
     setTransactionType('expense');
     setDate(new Date().toISOString().split('T')[0]);
     setAmount('');
-    setCategory('Groceries');
-    setCategoryColor(getCategoryColor('Groceries'));
+    setCategory('Total Spend');
+    setCategoryColor(getCategoryColor('Total Spend'));
     setCustomCategory('');
     setPaymentMethod('Other');
     setNotes('');
     setShowColorPicker(false);
+    setFormError(null);
   };
 
   if (!isOpen) return null;
@@ -129,14 +131,16 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      alert('Please enter a valid positive amount.');
+      setFormError('Please enter a valid positive amount.');
       return;
     }
 
     if (category === 'Custom / Other...' && !customCategory.trim()) {
-      alert('Please enter a custom category name.');
+      setFormError('Please enter a custom category name.');
       return;
     }
 
@@ -156,8 +160,9 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
       });
       onClose();
       resetForm();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving transaction:', err);
+      setFormError(err.message || 'Failed to save transaction to Google Sheet. Please check your connection.');
     } finally {
       setIsSubmitting(false);
     }
@@ -190,6 +195,12 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
 
         <div className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {formError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+                <span className="font-semibold">⚠️ {formError}</span>
+              </div>
+            )}
+
             {/* Transaction Type Segmented Selector */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">

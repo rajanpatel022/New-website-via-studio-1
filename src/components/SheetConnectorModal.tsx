@@ -52,6 +52,18 @@ function getSheet() {
   return sheet;
 }
 
+function findColumnIndex(headers, keywords) {
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i]).toLowerCase().trim();
+    for (var k = 0; k < keywords.length; k++) {
+      if (h === keywords[k] || h.indexOf(keywords[k]) !== -1) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
 function doGet(e) {
   try {
     var sheet = getSheet();
@@ -65,21 +77,23 @@ function doGet(e) {
       });
     }
 
-    var headerRow = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
-    var hasOldDesc = headerRow.indexOf('description') !== -1;
-    var typeCol = headerRow.indexOf('type');
-    var catCol = headerRow.indexOf('category');
-    var extraCol = headerRow.indexOf('extra') !== -1 ? headerRow.indexOf('extra') : headerRow.indexOf('notes');
-    var amtCol = headerRow.indexOf('amount');
-    var payCol = headerRow.indexOf('payment method');
+    var headerRow = data[0];
+    var idCol = findColumnIndex(headerRow, ['id', 'uuid', 'txn']);
+    var dateCol = findColumnIndex(headerRow, ['date', 'time', 'timestamp']);
+    var typeCol = findColumnIndex(headerRow, ['type']);
+    var catCol = findColumnIndex(headerRow, ['category', 'cat', 'tag']);
+    var extraCol = findColumnIndex(headerRow, ['extra', 'notes', 'note', 'memo', 'remarks', 'comment', 'description', 'detail']);
+    var amtCol = findColumnIndex(headerRow, ['amount', 'amt', 'cost', 'price', 'value', 'total', 'sum', 'inr', 'rs']);
+    var payCol = findColumnIndex(headerRow, ['payment', 'method', 'mode', 'paid', 'account']);
 
     var expenses = [];
     for (var i = 1; i < data.length; i++) {
       var row = data[i];
-      if (!row[0] && !row[1] && !row[3]) continue;
+      if (!row || row.length === 0) continue;
 
-      var rawDate = row[1];
+      // Extract Date
       var formattedDate = '';
+      var rawDate = (dateCol !== -1) ? row[dateCol] : row[1];
       if (rawDate instanceof Date) {
         var yyyy = rawDate.getFullYear();
         var mm = String(rawDate.getMonth() + 1).padStart(2, '0');
@@ -89,43 +103,53 @@ function doGet(e) {
         formattedDate = String(rawDate).trim();
       }
 
-      var rowType = (typeCol !== -1 && row[typeCol]) ? String(row[typeCol]).toLowerCase() : (String(row[2] || 'expense').toLowerCase());
-      var rowCat = (catCol !== -1 && row[catCol]) ? String(row[catCol]) : (row[3] ? String(row[3]) : 'Miscellaneous');
-      
+      // Extract ID
+      var rowId = (idCol !== -1 && row[idCol]) ? String(row[idCol]) : ('exp_' + (i + 1));
+
+      // Extract Type
+      var rawType = (typeCol !== -1 && row[typeCol]) ? String(row[typeCol]).toLowerCase().trim() : 'expense';
+      var rowType = (rawType === 'income' || rawType === 'inc') ? 'income' : 'expense';
+
+      // Extract Category
+      var rowCat = (catCol !== -1 && row[catCol]) ? String(row[catCol]).trim() : 'Miscellaneous';
+      if (!rowCat) rowCat = 'Miscellaneous';
+
+      // Extract Amount (strictly numeric)
       var rowAmt = 0;
-      if (amtCol !== -1) {
-        rowAmt = parseFloat(row[amtCol]) || 0;
-      } else if (hasOldDesc) {
-        rowAmt = parseFloat(row[5]) || 0;
+      if (amtCol !== -1 && row[amtCol] !== undefined && row[amtCol] !== '') {
+        rowAmt = parseFloat(String(row[amtCol]).replace(/[^0-9.-]+/g, '')) || 0;
       } else {
-        rowAmt = parseFloat(row[4]) || 0;
+        // Fallback: Find first numeric column if amtCol failed
+        for (var c = 0; c < row.length; c++) {
+          if (c !== idCol && c !== dateCol && typeof row[c] === 'number' && !isNaN(row[c])) {
+            rowAmt = row[c];
+            break;
+          }
+        }
       }
 
+      // Extract Payment Method
       var rowPay = 'Other';
-      if (payCol !== -1 && row[payCol]) {
-        rowPay = String(row[payCol]);
-      } else if (hasOldDesc) {
-        rowPay = String(row[6] || 'Other');
-      } else {
-        rowPay = String(row[5] || 'Other');
+      if (payCol !== -1 && row[payCol] !== undefined && row[payCol] !== '') {
+        rowPay = String(row[payCol]).trim();
       }
 
+      // Extract Extra / Notes
       var rowNotes = '';
-      if (extraCol !== -1 && row[extraCol]) {
-        rowNotes = String(row[extraCol]);
-      } else if (hasOldDesc) {
-        rowNotes = String(row[7] || '');
-      } else if (row[4] && isNaN(parseFloat(row[4]))) {
-        rowNotes = String(row[4]);
+      if (extraCol !== -1 && row[extraCol] !== undefined && row[extraCol] !== '') {
+        rowNotes = String(row[extraCol]).trim();
       }
+
+      // Skip completely blank rows
+      if (!formattedDate && rowAmt === 0 && !rowNotes && rowCat === 'Miscellaneous') continue;
 
       expenses.push({
-        id: String(row[0] || 'exp_' + (i + 1)),
-        date: formattedDate,
+        id: rowId,
+        date: formattedDate || Utilities.formatDate(new Date(), 'GMT', 'yyyy-MM-dd'),
         type: rowType,
         category: rowCat,
-        amount: rowAmt,
-        paymentMethod: rowPay,
+        amount: Math.abs(rowAmt),
+        paymentMethod: rowPay || 'Other',
         notes: rowNotes,
         rowIndex: i + 1
       });
@@ -180,20 +204,25 @@ function doPost(e) {
     if (action === 'batch-update-category') {
       var rowIndices = payload.rowIndices || [];
       var newCat = payload.category;
+      var lastCol = Math.max(sheet.getLastColumn(), 1);
+      var headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      var catCol = findColumnIndex(headerRow, ['category', 'cat', 'tag']);
+      var targetCol = (catCol !== -1) ? (catCol + 1) : 4;
+
       for (var j = 0; j < rowIndices.length; j++) {
         var r = parseInt(rowIndices[j], 10);
-        if (r > 1 && r <= sheet.getLastRow()) sheet.getRange(r, 4).setValue(newCat);
+        if (r > 1 && r <= sheet.getLastRow()) sheet.getRange(r, targetCol).setValue(newCat);
       }
       return responseJSON({ status: 'success' });
     }
 
     if (action === 'seed') {
       var sample = [
-        ['exp_1', '2026-02-01', 'income', 'Salary', 55000, 'Bank Transfer', 'Direct deposit', new Date().toISOString()],
-        ['exp_2', '2026-02-02', 'expense', 'Housing & Rent', 15000, 'Bank Transfer', 'Monthly apartment rent', new Date().toISOString()],
-        ['exp_3', '2026-02-04', 'expense', 'Groceries', 3200, 'UPI', 'Supermarket & weekly food', new Date().toISOString()],
-        ['exp_4', '2026-02-06', 'expense', 'Utilities & Bills', 1850, 'UPI', 'Electricity & broadband bill', new Date().toISOString()],
-        ['exp_5', '2026-02-08', 'expense', 'Dining & Drinks', 1450, 'Credit Card', 'Weekend dinner with family', new Date().toISOString()]
+        ['exp_1', '2026-02-01', 'income', 'Salary', 'Direct deposit', 55000, 'Bank Transfer', new Date().toISOString()],
+        ['exp_2', '2026-02-02', 'expense', 'Housing & Rent', 'Monthly apartment rent', 15000, 'Bank Transfer', new Date().toISOString()],
+        ['exp_3', '2026-02-04', 'expense', 'Groceries', 'Supermarket & weekly food', 3200, 'UPI', new Date().toISOString()],
+        ['exp_4', '2026-02-06', 'expense', 'Utilities & Bills', 'Electricity & broadband bill', 1850, 'UPI', new Date().toISOString()],
+        ['exp_5', '2026-02-08', 'expense', 'Dining & Drinks', 'Weekend dinner with family', 1450, 'Credit Card', new Date().toISOString()]
       ];
       for (var s = 0; s < sample.length; s++) sheet.appendRow(sample[s]);
       return responseJSON({ status: 'success' });
@@ -209,18 +238,37 @@ function doPost(e) {
     var expNotes = exp.notes || '';
     var rIndex = parseInt(exp.rowIndex, 10);
 
-    // Check sheet header layout
-    var firstRow = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0].map(function(h) { return String(h).trim().toLowerCase(); });
-    var hasOldDescriptionHeader = firstRow.indexOf('description') !== -1;
-    var extraAtIndex4 = firstRow.indexOf('extra') === 4;
+    // Dynamically match existing sheet headers so column order is NEVER broken
+    var lastCol = Math.max(sheet.getLastColumn(), 1);
+    var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var rowValues = new Array(headers.length);
 
-    var rowValues;
-    if (hasOldDescriptionHeader) {
-      rowValues = [expId, expDate, expType, expCat, '', expAmt, expPay, expNotes, new Date().toISOString()];
-    } else if (extraAtIndex4) {
+    for (var c = 0; c < headers.length; c++) {
+      var h = String(headers[c]).toLowerCase().trim();
+      if (h === 'id' || h.indexOf('uuid') !== -1 || h.indexOf('txn') !== -1) {
+        rowValues[c] = expId;
+      } else if (h.indexOf('date') !== -1 || h.indexOf('time') !== -1) {
+        rowValues[c] = expDate;
+      } else if (h === 'type') {
+        rowValues[c] = expType;
+      } else if (h.indexOf('cat') !== -1 || h.indexOf('tag') !== -1) {
+        rowValues[c] = expCat;
+      } else if (h.indexOf('amount') !== -1 || h.indexOf('amt') !== -1 || h.indexOf('cost') !== -1 || h.indexOf('price') !== -1) {
+        rowValues[c] = expAmt;
+      } else if (h.indexOf('pay') !== -1 || h.indexOf('method') !== -1 || h.indexOf('mode') !== -1) {
+        rowValues[c] = expPay;
+      } else if (h.indexOf('extra') !== -1 || h.indexOf('note') !== -1 || h.indexOf('remark') !== -1 || h.indexOf('memo') !== -1 || h.indexOf('desc') !== -1) {
+        rowValues[c] = expNotes;
+      } else if (h.indexOf('creat') !== -1) {
+        rowValues[c] = new Date().toISOString();
+      } else {
+        rowValues[c] = '';
+      }
+    }
+
+    // Fallback if headers were empty or single column
+    if (rowValues.length < 5) {
       rowValues = [expId, expDate, expType, expCat, expNotes, expAmt, expPay, new Date().toISOString()];
-    } else {
-      rowValues = [expId, expDate, expType, expCat, expAmt, expPay, expNotes, new Date().toISOString()];
     }
 
     if (rIndex > 1 && rIndex <= sheet.getLastRow()) {

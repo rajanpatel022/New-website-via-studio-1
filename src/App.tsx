@@ -48,17 +48,17 @@ const DEMO_EXPENSES: Expense[] = [
     id: 'demo_3',
     date: new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0],
     type: 'expense',
-    category: 'Groceries',
+    category: 'Total UPI',
     amount: 3200,
     paymentMethod: 'UPI',
-    notes: 'Supermarket & weekly food',
+    notes: 'Supermarket & weekly shopping via UPI',
     rowIndex: 4,
   },
   {
     id: 'demo_4',
     date: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
     type: 'expense',
-    category: 'Utilities & Bills',
+    category: 'Total Spend',
     amount: 1850,
     paymentMethod: 'UPI',
     notes: 'Electricity & broadband bill',
@@ -68,10 +68,10 @@ const DEMO_EXPENSES: Expense[] = [
     id: 'demo_5',
     date: new Date(Date.now() - 9 * 86400000).toISOString().split('T')[0],
     type: 'expense',
-    category: 'Dining & Drinks',
+    category: 'Total Cash',
     amount: 1450,
-    paymentMethod: 'Credit Card',
-    notes: 'Weekend dinner with family',
+    paymentMethod: 'Cash',
+    notes: 'Cash withdrawal & local market purchases',
     rowIndex: 6,
   },
   {
@@ -229,18 +229,29 @@ export default function App() {
   };
 
   // Delete Single Expense
-  const handleDeleteExpense = async (rowIndex: number) => {
+  const handleDeleteExpense = async (rowIndex?: number, id?: string) => {
     setErrorMsg(null);
-    if (isConnected) {
+    let targetRowIndex = rowIndex;
+    if (!targetRowIndex && id) {
+      const found = expenses.find((e) => e.id === id);
+      if (found && found.rowIndex) {
+        targetRowIndex = found.rowIndex;
+      }
+    }
+
+    if (isConnected && targetRowIndex) {
       try {
-        await deleteExpenseFromSheet(scriptUrl, rowIndex);
+        await deleteExpenseFromSheet(scriptUrl, targetRowIndex);
         await loadExpenses(scriptUrl);
       } catch (err: any) {
         console.error('Delete expense error:', err);
         setErrorMsg(err.message || 'Failed to delete row from Google Sheet');
+        throw err;
       }
     } else {
-      setExpenses((prev) => prev.filter((e) => e.rowIndex !== rowIndex));
+      setExpenses((prev) =>
+        prev.filter((e) => (targetRowIndex ? e.rowIndex !== targetRowIndex : e.id !== id))
+      );
     }
   };
 
