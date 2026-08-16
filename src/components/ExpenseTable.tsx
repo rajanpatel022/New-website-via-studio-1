@@ -104,7 +104,6 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
         if (typeFilter === 'expense' && isInc) return false;
 
         const matchesSearch =
-          exp.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
           exp.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (exp.notes && exp.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (exp.paymentMethod && exp.paymentMethod.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -217,15 +216,15 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
 
   const exportToCSV = () => {
     if (!expenses.length) return;
-    const headers = ['ID', 'Date', 'Category', 'Description', 'Amount (₹)', 'Payment Method', 'Notes'];
+    const headers = ['ID', 'Date', 'Type', 'Category', 'Extra', 'Payment Method', 'Amount (₹)'];
     const rows = expenses.map((e) => [
       e.id,
       e.date,
+      `"${isIncomeTransaction(e) ? 'Income' : 'Expense'}"`,
       `"${e.category}"`,
-      `"${e.description.replace(/"/g, '""')}"`,
-      e.amount,
-      `"${e.paymentMethod}"`,
       `"${(e.notes || '').replace(/"/g, '""')}"`,
+      `"${e.paymentMethod || 'Other'}"`,
+      e.amount,
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -500,13 +499,13 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                   <ArrowUpDown className="w-3 h-3" />
                 </div>
               </th>
-              <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3 cursor-pointer hover:text-slate-200" onClick={() => toggleSort('category')}>
                 <div className="flex items-center gap-1">
                   <span>Category</span>
                   <ArrowUpDown className="w-3 h-3" />
                 </div>
               </th>
+              <th className="px-4 py-3">Extra</th>
               <th className="px-4 py-3">Payment Method</th>
               <th className="px-4 py-3 cursor-pointer hover:text-slate-200 text-right" onClick={() => toggleSort('amount')}>
                 <div className="flex items-center justify-end gap-1">
@@ -556,23 +555,10 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                       {exp.date}
                     </td>
 
-                    {/* Description & Notes */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`p-1 rounded-md text-[10px] font-black ${
-                          isInc ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                        }`}>
-                          {isInc ? 'INC' : 'EXP'}
-                        </span>
-                        <p className="font-semibold text-slate-100">{exp.description}</p>
-                      </div>
-                      {exp.notes && <p className="text-[11px] text-slate-400 truncate max-w-xs mt-0.5">{exp.notes}</p>}
-                    </td>
-
-                    {/* Category Pill */}
+                    {/* Category */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold"
                         style={{
                           backgroundColor: `${CATEGORY_COLORS[exp.category] || '#64748b'}20`,
                           color: CATEGORY_COLORS[exp.category] || '#94a3b8',
@@ -580,11 +566,22 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                         }}
                       >
                         <span
-                          className="w-1.5 h-1.5 rounded-full"
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={{ backgroundColor: CATEGORY_COLORS[exp.category] || '#64748b' }}
-                        ></span>
-                        {exp.category}
+                        />
+                        <span>{exp.category}</span>
                       </span>
+                    </td>
+
+                    {/* Extra */}
+                    <td className="px-4 py-3">
+                      {exp.notes ? (
+                        <span className="text-xs text-slate-300 truncate max-w-[220px] block" title={exp.notes}>
+                          {exp.notes}
+                        </span>
+                      ) : (
+                        <span className="text-slate-600 text-xs">—</span>
+                      )}
                     </td>
 
                     {/* Payment Method */}
@@ -604,18 +601,18 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => onEditExpense(exp)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 transition-colors cursor-pointer"
                           title="Edit expense row"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => {
-                            if (exp.rowIndex && confirm(`Delete "${exp.description}" from Google Sheet?`)) {
+                            if (exp.rowIndex && confirm(`Delete "${exp.category}" (${isInc ? '+' : '-'}₹${Math.abs(exp.amount)}) from Google Sheet?`)) {
                               onDeleteExpense(exp.rowIndex);
                             }
                           }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 transition-colors cursor-pointer"
                           title="Delete expense row"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

@@ -2,25 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { Expense } from '../types';
 import {
   calculateSpendingSummary,
-  getMonthlyTrends,
   getCategoryTrends,
   formatCurrency,
   CATEGORY_COLORS,
 } from '../lib/expenseUtils';
 import { DraggableMetricCards } from './DraggableMetricCards';
+import { TrendChart } from './TrendChart';
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
   PieChart,
   Pie,
   Cell,
   BarChart,
   Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
 } from 'recharts';
 import {
   IndianRupee,
@@ -54,7 +52,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   isSeeding,
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
-  const [chartType, setChartType] = useState<'total' | 'stacked'>('total');
 
   // Monthly Budget Target State
   const [monthlyBudget, setMonthlyBudget] = useState<number>(() => {
@@ -86,7 +83,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const summary = calculateSpendingSummary(expenses);
-  const monthlyTrends = getMonthlyTrends(expenses);
   const categoryTrends = getCategoryTrends(expenses, selectedMonth);
 
   // Budget progress calculations
@@ -298,110 +294,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Top Drag & Drop KPI Metric Cards */}
       <DraggableMetricCards summary={summary} expenses={expenses} />
 
-      {/* Monthly Spending Trend Chart */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-bold flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-emerald-400" />
-              Monthly Spending Trends
-            </h3>
-            <p className="text-xs text-slate-400">
-              Historical spending breakdown aggregated by month from Google Sheets
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            <div className="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700 text-xs">
-              <button
-                onClick={() => setChartType('total')}
-                className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                  chartType === 'total' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Overall Trend
-              </button>
-              <button
-                onClick={() => setChartType('stacked')}
-                className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                  chartType === 'stacked' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Category Breakdown
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {monthlyTrends.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center bg-slate-800/20 rounded-xl border border-dashed border-slate-800 text-center p-6 space-y-3">
-            <BarChart3 className="w-10 h-10 text-slate-600" />
-            <p className="text-sm text-slate-400 font-medium">No expense records found in Google Sheet.</p>
-            {onSeedSampleData && (
-              <button
-                onClick={onSeedSampleData}
-                disabled={isSeeding}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all shadow"
-              >
-                {isSeeding ? 'Seeding Data...' : 'Seed Sample Spending Data'}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="h-72 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyTrends} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} tickLine={false} />
-                <YAxis
-                  stroke="#94a3b8"
-                  fontSize={12}
-                  tickLine={false}
-                  tickFormatter={(val) => `₹${val}`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderColor: '#334155',
-                    borderRadius: '0.75rem',
-                    color: '#f8fafc',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                  }}
-                  formatter={(value: any) => [formatCurrency(Number(value)), 'Amount']}
-                />
-                {chartType === 'total' ? (
-                  <Area
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#10b981"
-                    strokeWidth={3}
-                    fillOpacity={1}
-                    fill="url(#totalGradient)"
-                  />
-                ) : (
-                  Object.keys(CATEGORY_COLORS).map((cat) => (
-                    <Area
-                      key={cat}
-                      type="monotone"
-                      dataKey={cat}
-                      stackId="1"
-                      stroke={CATEGORY_COLORS[cat]}
-                      fill={CATEGORY_COLORS[cat]}
-                      fillOpacity={0.7}
-                    />
-                  ))
-                )}
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
+      {/* Trend Multi-Metric Comparison Chart */}
+      <TrendChart
+        expenses={expenses}
+        onSeedSampleData={onSeedSampleData}
+        isSeeding={isSeeding}
+      />
 
       {/* Grid: Category Breakdown Pie + Payment Methods */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

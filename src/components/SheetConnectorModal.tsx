@@ -31,7 +31,7 @@ const APPS_SCRIPT_CODE = `/**
  */
 
 function setupHeaders(sheet) {
-  var headers = ['ID', 'Date', 'Type', 'Category', 'Description', 'Amount', 'Payment Method', 'Notes', 'Created At'];
+  var headers = ['ID', 'Date', 'Type', 'Category', 'Extra', 'Amount', 'Payment Method', 'Created At'];
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     var headerRange = sheet.getRange(1, 1, 1, headers.length);
@@ -65,10 +65,18 @@ function doGet(e) {
       });
     }
 
+    var headerRow = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+    var hasOldDesc = headerRow.indexOf('description') !== -1;
+    var typeCol = headerRow.indexOf('type');
+    var catCol = headerRow.indexOf('category');
+    var extraCol = headerRow.indexOf('extra') !== -1 ? headerRow.indexOf('extra') : headerRow.indexOf('notes');
+    var amtCol = headerRow.indexOf('amount');
+    var payCol = headerRow.indexOf('payment method');
+
     var expenses = [];
     for (var i = 1; i < data.length; i++) {
       var row = data[i];
-      if (!row[0] && !row[1] && !row[4]) continue;
+      if (!row[0] && !row[1] && !row[3]) continue;
 
       var rawDate = row[1];
       var formattedDate = '';
@@ -81,15 +89,44 @@ function doGet(e) {
         formattedDate = String(rawDate).trim();
       }
 
+      var rowType = (typeCol !== -1 && row[typeCol]) ? String(row[typeCol]).toLowerCase() : (String(row[2] || 'expense').toLowerCase());
+      var rowCat = (catCol !== -1 && row[catCol]) ? String(row[catCol]) : (row[3] ? String(row[3]) : 'Miscellaneous');
+      
+      var rowAmt = 0;
+      if (amtCol !== -1) {
+        rowAmt = parseFloat(row[amtCol]) || 0;
+      } else if (hasOldDesc) {
+        rowAmt = parseFloat(row[5]) || 0;
+      } else {
+        rowAmt = parseFloat(row[4]) || 0;
+      }
+
+      var rowPay = 'Other';
+      if (payCol !== -1 && row[payCol]) {
+        rowPay = String(row[payCol]);
+      } else if (hasOldDesc) {
+        rowPay = String(row[6] || 'Other');
+      } else {
+        rowPay = String(row[5] || 'Other');
+      }
+
+      var rowNotes = '';
+      if (extraCol !== -1 && row[extraCol]) {
+        rowNotes = String(row[extraCol]);
+      } else if (hasOldDesc) {
+        rowNotes = String(row[7] || '');
+      } else if (row[4] && isNaN(parseFloat(row[4]))) {
+        rowNotes = String(row[4]);
+      }
+
       expenses.push({
         id: String(row[0] || 'exp_' + (i + 1)),
         date: formattedDate,
-        type: String(row[2] || 'expense').toLowerCase(),
-        category: String(row[3] || 'Miscellaneous'),
-        description: String(row[4] || ''),
-        amount: parseFloat(row[5]) || 0,
-        paymentMethod: String(row[6] || 'Other'),
-        notes: String(row[7] || ''),
+        type: rowType,
+        category: rowCat,
+        amount: rowAmt,
+        paymentMethod: rowPay,
+        notes: rowNotes,
         rowIndex: i + 1
       });
     }
@@ -152,11 +189,11 @@ function doPost(e) {
 
     if (action === 'seed') {
       var sample = [
-        ['exp_1', '2026-02-01', 'income', 'Salary', 'Monthly Paycheck', 5000, 'Bank Transfer', 'Direct deposit', new Date().toISOString()],
-        ['exp_2', '2026-02-02', 'expense', 'Housing & Rent', 'Apartment Rent', 1200, 'Bank Transfer', 'Rent', new Date().toISOString()],
-        ['exp_3', '2026-02-04', 'expense', 'Groceries', 'Supermarket & Produce', 145.50, 'Credit Card', 'Weekly groceries', new Date().toISOString()],
-        ['exp_4', '2026-02-06', 'expense', 'Utilities & Bills', 'Electricity & Internet', 110, 'UPI', 'Bills', new Date().toISOString()],
-        ['exp_5', '2026-02-08', 'expense', 'Dining & Drinks', 'Dinner with friends', 68.20, 'UPI', 'Dinner', new Date().toISOString()]
+        ['exp_1', '2026-02-01', 'income', 'Salary', 55000, 'Bank Transfer', 'Direct deposit', new Date().toISOString()],
+        ['exp_2', '2026-02-02', 'expense', 'Housing & Rent', 15000, 'Bank Transfer', 'Monthly apartment rent', new Date().toISOString()],
+        ['exp_3', '2026-02-04', 'expense', 'Groceries', 3200, 'UPI', 'Supermarket & weekly food', new Date().toISOString()],
+        ['exp_4', '2026-02-06', 'expense', 'Utilities & Bills', 1850, 'UPI', 'Electricity & broadband bill', new Date().toISOString()],
+        ['exp_5', '2026-02-08', 'expense', 'Dining & Drinks', 1450, 'Credit Card', 'Weekend dinner with family', new Date().toISOString()]
       ];
       for (var s = 0; s < sample.length; s++) sheet.appendRow(sample[s]);
       return responseJSON({ status: 'success' });
@@ -167,13 +204,25 @@ function doPost(e) {
     var expDate = exp.date || Utilities.formatDate(new Date(), 'GMT', 'yyyy-MM-dd');
     var expType = exp.type || 'expense';
     var expCat = exp.category || 'Miscellaneous';
-    var expDesc = exp.description || '';
     var expAmt = parseFloat(exp.amount) || 0;
     var expPay = exp.paymentMethod || 'Other';
     var expNotes = exp.notes || '';
     var rIndex = parseInt(exp.rowIndex, 10);
 
-    var rowValues = [expId, expDate, expType, expCat, expDesc, expAmt, expPay, expNotes, new Date().toISOString()];
+    // Check sheet header layout
+    var firstRow = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0].map(function(h) { return String(h).trim().toLowerCase(); });
+    var hasOldDescriptionHeader = firstRow.indexOf('description') !== -1;
+    var extraAtIndex4 = firstRow.indexOf('extra') === 4;
+
+    var rowValues;
+    if (hasOldDescriptionHeader) {
+      rowValues = [expId, expDate, expType, expCat, '', expAmt, expPay, expNotes, new Date().toISOString()];
+    } else if (extraAtIndex4) {
+      rowValues = [expId, expDate, expType, expCat, expNotes, expAmt, expPay, new Date().toISOString()];
+    } else {
+      rowValues = [expId, expDate, expType, expCat, expAmt, expPay, expNotes, new Date().toISOString()];
+    }
+
     if (rIndex > 1 && rIndex <= sheet.getLastRow()) {
       sheet.getRange(rIndex, 1, 1, rowValues.length).setValues([rowValues]);
     } else {

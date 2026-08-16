@@ -12,12 +12,12 @@ import {
   Calendar,
   IndianRupee,
   Tag,
-  FileText,
   CreditCard,
   Check,
   ArrowDownCircle,
   ArrowUpCircle,
   Palette,
+  AlignLeft,
 } from 'lucide-react';
 
 interface ExpenseFormProps {
@@ -41,8 +41,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<string>('Groceries');
   const [customCategory, setCustomCategory] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<string>('UPI');
+  const [paymentMethod, setPaymentMethod] = useState<string>('Other');
   const [notes, setNotes] = useState<string>('');
 
   // Category Color State
@@ -86,8 +85,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
         setCategoryColor(getCategoryColor(cat));
       }
 
-      setDescription(editingExpense.description || '');
-      setPaymentMethod(editingExpense.paymentMethod || 'UPI');
+      setPaymentMethod(editingExpense.paymentMethod || 'Other');
       setNotes(editingExpense.notes || '');
     } else {
       resetForm();
@@ -120,8 +118,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
     setCategory('Groceries');
     setCategoryColor(getCategoryColor('Groceries'));
     setCustomCategory('');
-    setDescription('');
-    setPaymentMethod('UPI');
+    setPaymentMethod('Other');
     setNotes('');
     setShowColorPicker(false);
   };
@@ -135,10 +132,6 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
       alert('Please enter a valid positive amount.');
-      return;
-    }
-    if (!description.trim()) {
-      alert('Please enter a description.');
       return;
     }
 
@@ -158,8 +151,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
         amount: numAmount,
         type: transactionType,
         category: finalCategory || (transactionType === 'income' ? 'Miscellaneous Income' : 'Miscellaneous'),
-        description: description.trim(),
-        paymentMethod,
+        paymentMethod: paymentMethod || 'Other',
         notes: notes.trim(),
       });
       onClose();
@@ -272,21 +264,6 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
                   </span>
                 </div>
               </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1 flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5" /> Description / Source
-              </label>
-              <input
-                type="text"
-                placeholder={transactionType === 'income' ? 'e.g. Monthly Salary, Freelance project, Dividend' : 'e.g. Supermarket, Electricity Bill, Cafe'}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-              />
             </div>
 
             {/* Category & Payment Method */}
@@ -420,14 +397,17 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({
               </div>
             </div>
 
-            {/* Notes */}
+            {/* Extra Field */}
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
-                Notes / Memo (Optional)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-slate-400 flex items-center gap-1">
+                  <AlignLeft className="w-3.5 h-3.5" /> Extra
+                </label>
+                <span className="text-[10px] text-slate-500 font-normal">Optional</span>
+              </div>
               <input
                 type="text"
-                placeholder="Additional context or reference..."
+                placeholder="Any extra details, remarks, or notes (optional)..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"

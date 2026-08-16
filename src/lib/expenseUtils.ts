@@ -210,19 +210,46 @@ export function calculateSpendingSummary(expenses: Expense[]): SpendingSummary {
 export function getMonthlyTrends(expenses: Expense[]): MonthlyTrendData[] {
   if (!expenses.length) return [];
 
-  const monthMap: Record<string, { total: number; count: number; categories: Record<string, number> }> = {};
+  interface MonthBucket {
+    totalExpenses: number;
+    totalIncome: number;
+    expenseCount: number;
+    incomeCount: number;
+    highestExpense: number;
+    categories: Record<string, number>;
+  }
+
+  const monthMap: Record<string, MonthBucket> = {};
 
   expenses.forEach((exp) => {
     if (!exp.date) return;
     const yearMonth = exp.date.substring(0, 7); // 'YYYY-MM'
     if (!monthMap[yearMonth]) {
-      monthMap[yearMonth] = { total: 0, count: 0, categories: {} };
+      monthMap[yearMonth] = {
+        totalExpenses: 0,
+        totalIncome: 0,
+        expenseCount: 0,
+        incomeCount: 0,
+        highestExpense: 0,
+        categories: {},
+      };
     }
 
-    const amt = exp.amount || 0;
-    monthMap[yearMonth].total += amt;
-    monthMap[yearMonth].count += 1;
-    monthMap[yearMonth].categories[exp.category] = (monthMap[yearMonth].categories[exp.category] || 0) + amt;
+    const amt = Math.abs(exp.amount || 0);
+    const isIncome = isIncomeTransaction(exp);
+
+    if (isIncome) {
+      monthMap[yearMonth].totalIncome += amt;
+      monthMap[yearMonth].incomeCount += 1;
+    } else {
+      monthMap[yearMonth].totalExpenses += amt;
+      monthMap[yearMonth].expenseCount += 1;
+      if (amt > monthMap[yearMonth].highestExpense) {
+        monthMap[yearMonth].highestExpense = amt;
+      }
+      monthMap[yearMonth].categories[exp.category] =
+        (monthMap[yearMonth].categories[exp.category] || 0) + amt;
+    }
   });
 
   // Sort chronologically by YYYY-MM
@@ -233,15 +260,32 @@ export function getMonthlyTrends(expenses: Expense[]): MonthlyTrendData[] {
     const dateObj = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1);
     const monthName = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
+    const bucket = monthMap[ym];
+    const totalExp = Math.round(bucket.totalExpenses * 100) / 100;
+    const totalInc = Math.round(bucket.totalIncome * 100) / 100;
+    const net = Math.round((totalInc - totalExp) * 100) / 100;
+    const savingsRate =
+      totalInc > 0 ? Math.max(-100, Math.min(100, Math.round(((totalInc - totalExp) / totalInc) * 100))) : 0;
+    const avgExp =
+      bucket.expenseCount > 0 ? Math.round((totalExp / bucket.expenseCount) * 100) / 100 : 0;
+
     const item: MonthlyTrendData = {
       month: monthName,
       yearMonth: ym,
-      total: Math.round(monthMap[ym].total * 100) / 100,
-      count: monthMap[ym].count,
+      total: totalExp, // default for backwards compatibility
+      totalExpenses: totalExp,
+      totalIncome: totalInc,
+      netCashFlow: net,
+      savingsRate,
+      avgExpense: avgExp,
+      highestExpense: Math.round(bucket.highestExpense * 100) / 100,
+      count: bucket.expenseCount + bucket.incomeCount,
+      expenseCount: bucket.expenseCount,
+      incomeCount: bucket.incomeCount,
     };
 
     // Attach category breakdown to item
-    Object.entries(monthMap[ym].categories).forEach(([cat, val]) => {
+    Object.entries(bucket.categories).forEach(([cat, val]) => {
       item[cat] = Math.round(val * 100) / 100;
     });
 

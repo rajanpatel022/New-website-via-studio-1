@@ -4,7 +4,6 @@ export interface Expense {
   id: string;
   date: string; // YYYY-MM-DD
   category: ExpenseCategory;
-  description: string;
   amount: number;
   paymentMethod: string; // Credit Card, Debit Card, Cash, Bank Transfer, UPI, etc.
   type?: TransactionType; // 'expense' (-) or 'income' (+)
@@ -53,13 +52,13 @@ export const INCOME_CATEGORIES: string[] = [
 ];
 
 export const PAYMENT_METHODS = [
+  'Other',
   'UPI',
   'Credit Card',
   'Debit Card',
   'Cash',
   'Bank Transfer',
   'Digital Wallet',
-  'Other',
 ];
 
 export interface GoogleSheetFile {
